@@ -1,0 +1,27 @@
+Docker – ogólne pojęcie
+Docker to cała platforma i ekosystem do tworzenia, uruchamiania i zarządzania kontenerami. Gdy ktoś mówi „używam Dockera”, ma na myśli najczęściej całe to środowisko. W jego skład wchodzą właśnie Docker Engine i Docker Client.
+
+Docker Engine (silnik Dockera)
+To serce Dockera – właściwy serwer działający w tle (jako usługa/demon), który robi całą ciężką pracę:
+Tworzy i uruchamia kontenery
+Zarządza obrazami (obrazy to szablony kontenerów)
+Obsługuje sieci kontenerowe i woluminy
+Komunikuje się z rejestrami obrazów (np. Docker Hub)
+
+Docker Engine działa jako proces w tle (demon dockerd). Udostępnia REST API, przez które przyjmuje polecenia. Sam z siebie nie ma interfejsu użytkownika – trzeba się z nim komunikować przez to API.
+
+  
+Docker Client (klient Dockera)
+To narzędzie, którego Ty używasz – program docker w terminalu. Gdy wpisujesz komendy typu docker run, docker ps, docker build, korzystasz właśnie z klienta.
+
+Jego rola:
+Przyjmuje Twoje polecenia z linii komend
+Przekształca je na zapytania do REST API Docker Engine
+Wyświetla wyniki z powrotem w terminalu
+
+Klient i silnik mogą działać na tej samej maszynie (domyślnie komunikują się przez gniazdo uniksowe) lub na różnych – możesz z lokalnego klienta zarządzać zdalnym Docker Engine.
+
+Jak to działa razem
+text
+[Ty w terminalu] → [Docker Client] → (REST API) → [Docker Engine (dockerd)] → [Kontenery]
+    polecenie          docker run      HTTP/gniazdo       właściwy silnik       działające procesy
