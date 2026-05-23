@@ -1,0 +1,53 @@
+Najprostszą i najszybszą metodą, aby zainstalować Ubuntu na Windowsie, jest użycie Windows Subsystem for Linux (WSL). Działa to na Windows 10 (build 19041+) i Windows 11. Oto jak to zrobić krok po kroku:
+
+Uruchom PowerShell jako Administrator:
+Kliknij prawym przyciskiem myszy menu Start i wybierz „Terminal (Administrator)” lub „PowerShell (Administrator)”.
+
+Wpisz komendę instalacji:
+W oknie PowerShell wpisz poniższe polecenie i naciśnij Enter. To polecenie automatycznie włączy wymagane funkcje systemu Windows, zainstaluje WSL 2 i domyślną wersję Ubuntu:
+
+powershell
+wsl --install
+Uruchom ponownie komputer:
+Po zakończeniu procesu instalacji pojawi się monit o ponowne uruchomienie systemu. 
+Zrestartuj komputer, aby zmiany zostały zastosowane.
+
+Skonfiguruj Ubuntu:
+Po ponownym uruchomieniu znajdź aplikację "Ubuntu" w menu Start i uruchom ją. Przy pierwszym uruchomieniu system rozpakuje pliki i poprosi o utworzenie nowego użytkownika (nazwa UNIX) i hasła dla środowiska Linux.
+
+Inne opcje i porady
+Konkretna wersja Ubuntu: Jeśli nie chcesz wersji domyślnej, możesz najpierw sprawdzić listę dostępnych dystrybucji poleceniem wsl --list --online, a następnie zainstalować konkretną, np.: wsl --install -d Ubuntu-24.04.
+
+Starsze wersje Windowsa: Jeśli wsl --install nie działa (np. na starszym Windows 10), proces wymaga ręcznego włączenia funkcji „Windows Subsystem for Linux” i „Virtual Machine Platform” w panelu „Włącz lub wyłącz funkcje systemu Windows”, 
+a następnie instalacji dystrybucji ze sklepu Microsoft Store.
+WSL 2 (Windows Subsystem for Linux) ma kluczowe znaczenie dla Dockera na Windowsie. Oto dlaczego:
+
+Rola WSL 2 w Docker Desktop
+Docker Desktop na Windowsie używa WSL 2 jako swojego backendu zamiast tradycyjnej maszyny wirtualnej Hyper-V. To oznacza, że:
+
+Lepsza wydajność – kontenery działają prawie tak szybko jak na natywnym Linuxie, ponieważ WSL 2 korzysta z lekkiego, zoptymalizowanego jądra Linuxa.
+
+Mniejsze zużycie zasobów – WSL 2 dynamicznie przydziela RAM i CPU, nie rezerwuje ich na sztywno jak tradycyjna VM.
+
+Współdzielenie plików – możesz przechowywać projekty w systemie plików WSL 2 (\\wsl$\), co daje ogromny wzrost wydajności operacji I/O w porównaniu do udostępniania folderów z Windowsa przez SMB.
+
+Pełna integracja – Docker CLI działa zarówno z PowerShell/cmd, jak i z poziomu konsoli Ubuntu w WSL. Po prostu wpisujesz docker run i działa.
+
+Jak to wygląda w praktyce?
+Instalujesz WSL 2 (jak opisałem wcześniej – wsl --install).
+
+Instalujesz Docker Desktop i w ustawieniach zaznaczasz integrację z WSL 2.
+
+Docker automatycznie uruchamia swoje usługi wewnątrz WSL 2 – nie musisz nic konfigurować ręcznie.
+
+Wszystkie kontenery działają jako procesy WSL 2, a Ty zarządzasz nimi komendami docker z dowolnego terminala.
+
+Dlaczego to jest rewolucyjne?
+Koniec z problemami z Hyper-V, które blokowały inne hypervisory (np. VMware).
+
+Możesz jednocześnie korzystać z narzędzi Linuxowych (bash, grep, sed) i Windowsowych – najlepsze z obu światów.
+
+Współdzielenie kodu między Windows IDE (VS Code) a kontenerami jest błyskawiczne dzięki backendowi WSL 2.
+
+Krótko mówiąc
+WSL 2 to fundament, na którym Docker Desktop na Windowsie działa szybko, stabilnie i bezboleśnie. Bez niego musiałbyś korzystać ze starszego, wolniejszego trybu Hyper-V lub ręcznie stawiać wirtualną maszynę z Linuxem. Jeśli chcesz używać Dockera na Windowsie profesjonalnie – WSL 2 jest absolutną koniecznością.
