@@ -1,0 +1,72 @@
+edyta@DESKTOP-29FJTN7:~$ docker run -it ubuntu bash
+Unable to find image 'ubuntu:latest' locally
+latest: Pulling from library/ubuntu
+1c24335ddd46: Pull complete
+6f5c5aa4e145: Pull complete
+9bcf140d7f0f: Download complete
+Digest: sha256:f3d28607ddd78734bb7f71f117f3c6706c666b8b76cbff7c9ff6e5718d46ff64
+Status: Downloaded newer image for ubuntu:latest
+root@4d1cdf9bb104:/# 
+
+####Jesteś w kontenerze Ubuntu! 
+Jak wyjść z kontenera
+Wpisz exit i wciśnij Enter:
+
+bash
+exit
+albo wciśnij Ctrl+D (trzymaj Ctrl i wciśnij D).
+
+Stan po wyjściu
+text
+root@4d1cdf9bb104:/# exit
+edyta@DESKTOP-29FJTN7:~$
+Kontener się zatrzyma. Możesz go zobaczyć poleceniem:
+
+bash
+docker ps -a
+Zobaczysz kontener o ID 4d1cdf9bb104 ze statusem Exited.
+
+Jak ponownie uruchomić TEN SAM kontener?
+bash
+docker start -ai 4d1cdf9bb104
+(-a = attach, -i = interactive - żeby znowu móc w nim pisać)
+
+Wskazówka: W kontenerach Ctrl+C nie działa jak w zwykłym terminalu - nie zamyka sesji. Zawsze używa się exit lub Ctrl+D.
+
+Kontener to jak lekka, odizolowana maszyna wirtualna
+Wyobraź sobie, że kontener to paczkomat 📦:
+Ma wszystko, czego aplikacja potrzebuje (kod, biblioteki, ustawienia)
+Jest szczelnie zamknięty - nie miesza się z innymi paczkami
+Możesz go przenieść gdziekolwiek i będzie działać tak samo
+
+Co konkretnie daje kontener?
+1. Izolację 🔒
+Aplikacja w kontenerze nie widzi Twojego systemu
+Nie może nic zepsuć na Twoim komputerze
+Ma swoje własne pliki, procesy, sieć
+Przykład: W kontenerze Ubuntu możesz usunąć wszystkie pliki (rm -rf /), a Twój Windows/Linux będzie bezpieczny!
+
+2. Powtarzalność 🔄
+Działa tak samo u Ciebie, u kolegi i na serwerze w chmurze
+Koniec z "u mnie działa" - działa wszędzie tak samo
+
+3. Lekkość 🪶
+Kontenery współdzielą jądro systemu (nie potrzebują pełnego systemu operacyjnego)
+Startują w sekundy, nie minuty jak maszyny wirtualne
+Zajmują mało miejsca
+
+4. Przenośność ✈️
+Działają na Windows, Mac, Linux, w chmurze AWS/Azure/Google
+Jeden obraz kontenera - wszędzie ten sam
+
+Praktyczne zastosowania
+Programiści ->	"Mam apkę w Pythonie 3.12 z konkretnymi bibliotekami - wrzucam do kontenera i działa wszędzie"
+Testowanie ->	"Sprawdzam, czy działa na Ubuntu 22.04 i 24.04 jednocześnie"
+Serwery	-> "Uruchamiam 100 instancji strony WWW na jednym serwerze"
+Bazy danych ->	"Odpalam PostgreSQL w 2 sekundy bez instalacji"
+
+To jest magia kontenerów! ✨
+
+Kontener = aplikacja + jej środowisko, zapakowane razem, działające wszędzie tak samo.
+
+
