@@ -1,5 +1,5 @@
 Architektura Docker: Klient-Serwer
-Masz absolutną rację – Docker działa w architekturze klient-serwer. To klucz do zrozumienia całego procesu.
+Docker działa w architekturze klient-serwer. To klucz do zrozumienia całego procesu.
 
 Docker Client (docker) : To narzędzie, z którym bezpośrednio pracujesz w terminalu. Jego rola jest bardzo specyficzna: jest "tłumaczem". 
 Kiedy wpisujesz komendę docker run nginx, klient nie wykonuje jej sam. Zamiast tego:
