@@ -1,0 +1,70 @@
+Unix Socket to warstwa transportowa, a HTTP to protokół warstwy aplikacji, który po tym transporcie jest przesyłany. 
+Poprawnie powinno być: komunikacja odbywa się po HTTP over Unix Socket (Linux/Mac) lub po HTTP over Named Pipe (Windows) lub po HTTP over TCP (zdalnie, wszędzie).
+
+Sytuacja na Linuxie i macOS
+Na Linuxie i macOS Docker używa Unix Domain Socket (/var/run/docker.sock na Linuxie, /var/run/docker.sock na Mac - choć na Macu to wirtualizowane).
+Jest to specjalny plik w systemie plików.
+Komunikacja przez niego omija cały stos TCP/IP.
+Nie używa adresów IP ani portów.
+Jest to międzyprocesowy mechanizm komunikacji (IPC) jądra systemu.
+Protokół HTTP jest przesyłany bezpośrednio w strumieniu bajtów przez to gniazdo.
+
+Sytuacja na Windows – Named Pipes
+Windows rzeczywiście nie ma Unix Socketów. Ale ma swój własny, analogiczny mechanizm IPC – Named Pipes (nazwane potoki). 
+Docker Desktop na Windowsie używa właśnie Named Pipes do komunikacji lokalnej między klientem a demonem.
+
+Adres widoczny w docker info:
+text
+npipe:////./pipe/docker_cli
+lub jak w cytacie:
+text
+npipe://\\.\pipe\docker_cli
+(oba zapisy są równoważne – \\.\pipe\ to składnia Windows dla lokalnych named pipes)
+
+Czym jest Named Pipe:
+1.To mechanizm IPC w systemie Windows, odpowiednik Unix Socketów.
+2.Działa w przestrzeni nazw \\.\pipe\.
+3.Procesy komunikują się przez potok, który wygląda jak plik, ale nie jest plikiem na dysku.
+4.Jest dwukierunkowy, może działać między procesami na tej samej maszynie lub nawet zdalnie (przez SMB).
+5.Dane płyną strumieniowo, podobnie jak w Unix Socket.
+Co płynie w środku Named Pipe:
+Dokładnie to samo, co w Unix Socket – czysty protokół HTTP. 
+Klient wysyła żądania HTTP REST API, demon odpowiada odpowiedziami HTTP. 
+Warstwa transportowa jest inna (Named Pipe zamiast Unix Socket), ale zawartość jest identyczna.
+
+Czy Windows używa TCP/IP do komunikacji lokalnej?
+Nie, nie używa. To kluczowe sprostowanie.
+Lokalna komunikacja Client ↔ Engine na Windowsie nie przechodzi przez stos TCP/IP. Gdyby przechodziła, oznaczałoby to:
+1.Używanie adresu IP (np. 127.0.0.1).
+2.Używanie portu TCP (np. 2375).
+3.Ruch przechodzący przez kartę sieciową (choćby loopback).
+4.Możliwość przechwycenia ruchu lokalnego snifferem sieciowym na interfejsie loopback.
+Tymczasem Named Pipe działa zupełnie poza stosem TCP/IP. Jest to bezpośredni kanał między procesami, zarządzany przez jądro systemu Windows, podobnie jak Unix Socket na Linuxie.
+Historyczna ciekawostka: W bardzo starych wersjach Docker Toolbox (opartych na VirtualBox), demon Dockera działał wewnątrz maszyny wirtualnej Linux (boot2docker),
+a klient na Windowsie łączył się z nim przez TCP (zazwyczaj na 192.168.99.100:2376 z TLS). Wtedy rzeczywiście lokalna komunikacja przechodziła przez stos TCP/IP. Ale to historia – nowoczesny Docker Desktop używa Named Pipes lokalnie.
+
+Pełny obraz: Trzy metody transportu
+System	          Transport lokalny          	                       Transport zdalny
+Linux	            HTTP over Unix Socket                               HTTP over TCP 
+                  (unix:///var/run/docker.sock)                      (tcp://host:2375 lub tcp://host:2376 z TLS)
+macOS	            HTTP over Unix Socket                             	HTTP over TCP
+                 (w wirtualnej maszynie Linux, ale dostępny z hosta)	
+Windows	          HTTP over Named Pipe (npipe:////./pipe/docker_cli)	HTTP over TCP
+
+We wszystkich przypadkach payloadem jest HTTP – ten sam protokół, te same endpointy API, te same nagłówki. Zmienia się tylko warstwa transportowa.
+
+Gdy użytkownik Windows wpisze docker info, klient docker:
+1.Łączy się z demonem przez Named Pipe \\.\pipe\docker_cli (domyślnie).
+2.Wysyła żądanie HTTP GET /info.
+3.Demon odpowiada JSON-em zawierającym m.in. adres, pod którym nasłuchuje.
+4.W odpowiedzi pojawia się etykieta com.docker.desktop.address=npipe://\\.\pipe\docker_cli – to informacja, że demon jest dostępny lokalnie przez ten konkretny Named Pipe.
+
+To dowód, że Docker Desktop na Windowsie automatycznie konfiguruje klienta do używania Named Pipes, nie TCP.
+
+Poprawna pełna lista lokalnych transportów to:
+Unix Socket – na Linuxie i macOS.
+Named Pipe – na Windowsie.
+TCP – tylko do komunikacji zdalnej (lub w specyficznych konfiguracjach deweloperskich).
+
+Wniosek: Niezależnie od systemu operacyjnego, Docker do komunikacji lokalnej używa natywnego, wydajnego mechanizmu IPC (Unix Socket lub Named Pipe), omijając stos TCP/IP. HTTP jako protokół warstwy aplikacji pozostaje ten sam we wszystkich przypadkach. Komentujący miał całkowitą rację, a npipe://\\.\pipe\docker_cli jest windowsowym odpowiednikiem linuxowego unix:///var/run/docker.sock.
+
