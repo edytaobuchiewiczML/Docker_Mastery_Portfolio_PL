@@ -1,0 +1,67 @@
+Rozwińmy teraz architekturę sieciową w Dockerze, ze szczególnym uwzględnieniem sieci, czyli jak HTTP i TCP (oraz inne protokoły) działają w różnych warstwach komunikacji Dockera.
+
+Architektura Sieciowa Dockera: Dwie Zupełnie Różne Warstwy
+Kluczowe jest zrozumienie, że Docker operuje na dwóch niezależnych poziomach komunikacji sieciowej, które często są mylone. 
+
+Poziom 1: Sieć Administracyjna (Docker Client ↔ Docker Engine)
+To jest dokładnie to, co omówiliśmy wcześniej – API Dockera. To kanał, którym zarządzasz Dockerem.
+
+Protokół warstwy aplikacji: HTTP (REST API). Cała komunikacja: wydawanie komend, pobieranie listy kontenerów, logów – wszystko idzie jako żądania i odpowiedzi HTTP. 
+Niezależnie od tego, czy transportem jest Unix Socket czy TCP, "w środku" płynie HTTP.
+Transport:
+Unix Socket (/var/run/docker.sock): Domyślny, lokalny. Nie używa stosu TCP/IP. Dane są przesyłane bezpośrednio w jądrze systemu. Szybkie, bezpieczne, oparte na uprawnieniach plikowych. Na twojej maszynie GCP to domyślna ścieżka.
+TCP Socket (np. port 2375 lub 2376 dla TLS): Umożliwia zdalne zarządzanie. Tutaj w grę wchodzi pełny stos TCP/IP. Żądanie HTTP jest enkapsulowane w segmencie TCP, potem w pakiecie IP, a na końcu w ramce Ethernet. 
+Serwer HTTP (dockerd) nasłuchuje na porcie TCP.
+Podsumowując poziom 1: Komunikacja zarządcza to HTTP over Unix Socket (lokalnie) lub HTTP over TCP/IP (zdalnie).
+
+Poziom 2: Sieć Kontenerów (Ekspozycja Usług)
+To zupełnie inna historia. Gdy kontener już działa, chcesz, aby usługa w nim uruchomiona (np. serwer WWW na porcie 80) była dostępna. Docker tworzy wirtualne sieci, aby to umożliwić, a Ty, jako użytkownik, sterujesz tym za pomocą mapowania portów (-p).
+Tutaj Docker nie ingeruje w protokół warstwy aplikacji. To, co leci do kontenera, zależy wyłącznie od aplikacji w środku. Jeśli to Nginx, będzie to HTTP. Jeśli to Redis, będzie to jego własny protokół tekstowy. 
+Jeśli to baza PostgreSQL – jej protokół binarny. Docker jest tu tylko "hydraulikiem", przekierowującym ruch TCP lub UDP.
+Zobaczmy, co się dzieje krok po kroku na przykładzie komendy:
+docker run -d -p 8080:80 nginx
+#(założenie: wszystko na twojej maszynie w GCP)
+
+1.Żądanie przychodzi z zewnątrz: Ktoś z internetu (lub Ty z innej maszyny) wpisuje w przeglądarce http://<zewnetrzny-ip-twojej-maszyny-gcp>:8080. 
+Przeglądarka tworzy żądanie HTTP, opakowuje w TCP (port docelowy 8080), potem w IP i wysyła.
+2.Na hoście (maszyna GCP): Pakiet IP trafia na interfejs sieciowy twojej maszyny w GCP (np. eth0). Stos TCP/IP hosta widzi, że cel to port 8080.
+3.Reguła DNAT (iptables): Docker dawno temu (przy starcie kontenera) dodał regułę do iptables hosta. 
+Mówi ona: "Ruch TCP przychodzący na port 8080 przekieruj (zrób Destination NAT) na adres IP kontenera i port 80". Docker działa tutaj na warstwie L3/L4 modelu OSI (IP/TCP) – przepisuje nagłówki pakietów.
+4.Mostek Dockera (docker0): Przekierowany pakiet (teraz z celem: <IP_kontenera>:80) trafia na wirtualny mostek sieciowy docker0. 
+Mostek działa jak switch, przekazując ramkę Ethernet do wirtualnego interfejsu (veth) w przestrzeni nazw sieciowych kontenera.
+5.W kontenerze: Stos TCP/IP kontenera odbiera pakiet na swoim eth0, widzi port 80 i przekazuje dane do procesu nasłuchującego na tym porcie – w tym przypadku do serwera Nginx. 
+Nginx dostaje oryginalne żądanie HTTP.
+6.Odpowiedź: Nginx generuje odpowiedź HTTP, która wędruje tą samą ścieżką z powrotem, z odpowiednim SNAT (Source NAT) wykonanym przez iptables hosta, tak aby klient z zewnątrz dostał odpowiedź z adresu IP maszyny GCP, a nie wewnętrznego IP kontenera.
+
+Kluczowa różnica: Na tym poziomie HTTP z Dockera "wypada". Docker przekazuje surowe pakiety TCP. To aplikacja w kontenerze jest serwerem HTTP.
+
+Wizualizacja Dwóch Warstw
+Możemy to zobrazować tak:
+text
+[Twoja przeglądarka / klient API]
+        |
+        | Żądanie HTTP (API Dockera: "stwórz kontener z mapowaniem -p 8080:80")
+        v
+[Docker Client] ------ HTTP over Unix Socket/TCP -------> [Docker Engine (dockerd)]
+                                                             | 1. Zarządza (tworzy kontener)
+                                                             | 2. Konfiguruje reguły iptables (DNAT)
+                                                             v
+                                          [Kontener (nginx na porcie 80)]
+                                                   ^
+                                                   | Ruch użytkownika: TCP port 8080
+                                                   | (Docker robi tylko DNAT, nie dotyka HTTP)
+                                                   |
+ [Użytkownik zewnętrzny: http://IP_GCP:8080] --------
+
+
+Podsumowanie Ról Protokołów
+Protokół	                    Poziom 1: API Zarządzania	                                            Poziom 2: Sieć Kontenerów
+HTTP	                        Tak, to jest fundament API. Docker Engine jest serwerem HTTP.	        Nie (z perspektywy Dockera). To protokół aplikacji wewnątrz kontenera. Docker przekazuje go niżej, jako dane w segmencie TCP.
+TCP	                          Tak, opcjonalnie jako transport dla zdalnego API (over TCP/IP).	      Tak, to główny transport dla ruchu do kontenerów (mapowanie portów -p). Docker manipuluje nagłówkami TCP/IP (NAT).
+Unix Socket	                  Tak, jako domyślny, lokalny transport dla API.	                      Nie dotyczy.
+UDP                          	Nie.	                                                                Tak, Docker może mapować również porty UDP (-p 8080:80/udp). Działa analogicznie do TCP.
+  sieciowe sterowanie samym Dockerem, jest potężne, ale i niebezpieczne bez odpowiedniego zabezpieczenia. To, co dzieje się z ruchem aplikacji w kontenerach, to już zupełnie osobny, niższy poziom, gdzie Docker operuje głównie na stosie TCP/IP.
+
+mówiąc o Docker Engine jako serwerze HTTP dostępnym przez TCP, opisujemy wyłącznie pierwszy poziom – zdalne, sieciowe sterowanie samym Dockerem,
+co jest potężne, ale i niebezpieczne bez odpowiedniego zabezpieczenia. 
+To, co dzieje się z ruchem aplikacji w kontenerach, to już zupełnie osobny, niższy poziom, gdzie Docker operuje głównie na stosie TCP/IP.
