@@ -1,0 +1,54 @@
+Architektura Docker: Klient-Serwer
+Masz absolutną rację – Docker działa w architekturze klient-serwer. To klucz do zrozumienia całego procesu.
+
+Docker Client (docker) : To narzędzie, z którym bezpośrednio pracujesz w terminalu. Jego rola jest bardzo specyficzna: jest "tłumaczem". 
+Kiedy wpisujesz komendę docker run nginx, klient nie wykonuje jej sam. Zamiast tego:
+Konwertuje Twoją komendę i jej parametry (np. -d, -p 80:80) na ustrukturyzowane żądanie HTTP zgodne z API Dockera.
+Wysyła to żądanie HTTP do demona Dockera.
+Docker Engine (Docker Daemon - dockerd) : To właściwy "mózg" całej operacji, czyli serwer HTTP nasłuchujący na żądania klienta. 
+Działa w tle (jako demon) i zajmuje się całą ciężką pracą: zarządzaniem obrazami, kontenerami, sieciami i wolumenami. To on przyjmuje żądanie HTTP od klienta, interpretuje je i wykonuje.
+
+Ścieżka Komunikacji: Od Klienta do Demona
+To, co dzieje się pomiędzy klientem a demonem, zależy od konfiguracji i systemu operacyjnego:
+
+Domyślnie: Unix Socket
+Na Twojej maszynie linuxowej w Google Cloud Platform (GCP) klient i demon komunikują się domyślnie przez gniazdo Unix (unix socket). 
+Jest to specjalny plik, najczęściej /var/run/docker.sock. Żądanie HTTP jest wysyłane właśnie na to gniazdo. 
+Ta metoda jest szybka, bezpieczna (bo korzysta z uprawnień systemu plików) i lokalna.
+
+Alternatywnie: TCP Socket
+Jeśli demon został skonfigurowany do nasłuchiwania na porcie TCP (np. -H tcp://0.0.0.0:2375), klient może łączyć się zdalnie. 
+Wtedy wpisałabyś w swoim terminalu komendę z flagą -H, np.: docker -H tcp://adres-ip-twojej-maszyny-gcp:2375 ps.
+Ważne ostrzeżenie: Nasłuchiwanie na gołym TCP bez TLS jest skrajnie niebezpieczne, bo każdy, kto zna adres IP, może przejąć pełną kontrolę nad Dockerem na Twojej maszynie GCP.
+
+Proces docker pull i Ściąganie Lokalne Obrazu
+Rozbijmy to na proces, który idealnie obrazuje architekturę:
+
+Wydajesz komendę: docker pull ubuntu:22.04
+Praca Klienta: Docker Client konwertuje to na żądanie HTTP POST do API Endpoint /images/create?fromImage=ubuntu&tag=22.04 i wysyła je na gniazdo /var/run/docker.sock.
+Praca Demona (Engine): Demon odbiera żądanie i przejmuje kontrolę.
+Sprawdzenie lokalne: Najpierw demon sprawdza swój lokalny magazyn (local image cache), czy posiada już obraz ubuntu:22.04. 
+To jest to "ściąganie lokalne" – tak naprawdę nie jest to żadne pobieranie, a jedynie weryfikacja w lokalnym katalogu (zazwyczaj /var/lib/docker/overlay2 dla warstw obrazu).
+Pobieranie zdalne: Jeśli obrazu nie ma lokalnie, demon samodzielnie łączy się ze skonfigurowanym rejestrem (domyślnie Docker Hub).
+Pobieranie warstw: Demon analizuje manifest obrazu i warstwa po warstwie pobiera te, których nie ma lokalnie. 
+Dane przesyłane są strumieniowo, a klient wyświetla na swoim terminalu postęp (np. Downloaded..., Extracting...), który jest informacją zwrotną z API Demona.
+Zapis lokalny: Pobrane warstwy są zapisywane w lokalnym katalogu demona i rejestrowane w jego bazie. Dopiero teraz obraz staje się dostępny "lokalnie".
+
+Budowanie Obrazów i Uruchamianie Kontenerów – Ta Sama Zasada
+docker build: Klient wysyła kontekst budowania (pliki z bieżącego katalogu) spakowany jako archiwum .tar do Demona. Demon odbiera to archiwum, rozpakowuje w tymczasowej lokalizacji i wykonuje po kolei instrukcje z Dockerfile. 
+Każda instrukcja (np. RUN) tworzy nową warstwę. 
+Na końcu demon zapisuje warstwy jako nowy obraz w swoim lokalnym repozytorium i odsyła klientowi ID nowego obrazu.
+docker run: Klient wysyła żądanie do Demona z kompletem parametrów (nazwa obrazu, mapowanie portów, zmienne środowiskowe, polecenie). 
+Demon na podstawie obrazu i tych parametrów, wykorzystując containerd i runc, tworzy izolowane środowisko dla procesu – kontener. 
+Kontener jest uruchamiany na maszynie, na której działa Demon, czyli w tym przypadku bezpośrednio na Twojej maszynie linuxowej w GCP.
+
+Docker w Google Cloud Platform
+Kiedy mówimy o Dockerze na maszynie linuxowej w GCP, najczęściej chodzi o Compute Engine (maszynę wirtualną). W tym modelu:
+Zarówno Docker Client, jak i Docker Engine (Demon) są zainstalowane na tej samej maszynie wirtualnej.
+Twoja sesja SSH do GCP jest terminalem, w którym uruchamiasz klienta.
+
+Cała "ciężka praca" odbywa się lokalnie na tej maszynie GCP. Obrazy są pobierane z internetu przez tę maszynę i na niej uruchamiane są kontenery.
+
+To fundamentalnie różni się od usług zarządzanych, jak Cloud Run czy GKE (Google Kubernetes Engine), gdzie nie masz bezpośredniego dostępu do demona Dockera, a kontenery są uruchamiane na zarządzanej przez Google infrastrukturze.
+Docker Client to sprytny konwerter komend na REST API, a Docker Engine to potężny, nasłuchujący serwer HTTP, który wykonuje całą rzeczywistą pracę związaną z cyklem życia kontenerów i obrazów, domyślnie komunikując się lokalnie przez szybkie gniazdo Unix.
+
